@@ -119,6 +119,20 @@ function App() {
   }
 
   const selectedResult = results?.[activeAlgorithm]
+  const bestAvgWt = results ? Math.min(...algorithms.map(({ id }) => results[id].avgWt)) : null
+  const bestAlgorithms = results
+    ? algorithms.filter(({ id }) => Math.abs(results[id].avgWt - bestAvgWt) < Number.EPSILON)
+    : []
+  const rankedAlgorithms = results
+    ? [...algorithms]
+      .sort((a, b) => results[a.id].avgWt - results[b.id].avgWt)
+      .map((algorithm, index, sorted) => ({
+        ...algorithm,
+        rank: index > 0 && Math.abs(results[algorithm.id].avgWt - results[sorted[index - 1].id].avgWt) < Number.EPSILON
+          ? sorted[index - 1].rank
+          : index + 1,
+      }))
+    : []
 
   return (
     <div className={`app-shell ${theme}`}>
@@ -250,12 +264,45 @@ function App() {
                   onClick={() => setActiveAlgorithm(algorithm.id)}
                   aria-pressed={activeAlgorithm === algorithm.id}
                 >
-                  <span className="comparison-label">{algorithm.name}</span>
+                  <span className="comparison-label"><span className="rank-number">อันดับ {algorithm.rank}</span>{algorithm.name}</span>
                   <strong>{results[algorithm.id].avgWt.toFixed(2)}</strong>
                   <span className="comparison-caption">AVG WAITING TIME</span>
+                  {Math.abs(results[algorithm.id].avgWt - bestAvgWt) < Number.EPSILON && <span className="best-badge">ดีที่สุด</span>}
                   {algorithm.id === 'rr' && <span className="quantum-caption">Quantum = {quantum}</span>}
                 </button>
               ))}
+            </div>
+
+            <div className="ranking-panel">
+              <div className="ranking-heading">
+                <div><span className="section-kicker">RANKING</span><h3>อันดับเปรียบเทียบผล</h3></div>
+                <span>เรียงตาม Average Waiting Time จากน้อยไปมาก</span>
+              </div>
+              <div className="table-scroll ranking-scroll">
+                <table className="ranking-table">
+                  <thead><tr><th>อันดับ</th><th>อัลกอริทึม</th><th>Average Waiting Time</th><th>Average Turnaround Time</th></tr></thead>
+                  <tbody>{rankedAlgorithms.map((algorithm) => {
+                    const result = results[algorithm.id]
+                    const avgTat = result.rows.reduce((sum, row) => sum + row.tat, 0) / result.rows.length
+                    return (
+                      <tr key={algorithm.id}>
+                        <td><span className={`rank-chip ${algorithm.rank === 1 ? 'top-rank' : ''}`}>{algorithm.rank}</span></td>
+                        <td><span className="ranking-algorithm" style={{ '--algorithm-color': algorithm.color }}>{algorithm.name}</span></td>
+                        <td className="ranking-value">{result.avgWt.toFixed(2)}</td>
+                        <td>{avgTat.toFixed(2)}</td>
+                      </tr>
+                    )
+                  })}</tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="best-summary" role="status">
+              <span className="best-summary-icon" aria-hidden="true">★</span>
+              <div>
+                <strong>{bestAlgorithms.length === algorithms.length ? 'ผลเสมอกันทุกอัลกอริทึม' : `ผลดีที่สุด: ${bestAlgorithms.map(({ name }) => name).join(', ')}`}</strong>
+                <span>Average Waiting Time ต่ำสุด {bestAvgWt.toFixed(2)} หน่วย · ใช้เกณฑ์เวลารอเฉลี่ยที่น้อยที่สุด</span>
+              </div>
             </div>
 
             <div className="results-panel">
@@ -283,13 +330,19 @@ function App() {
                       <div
                         className="gantt-segment"
                         key={`${segment.process}-${index}`}
+                        tabIndex={0}
+                        aria-label={`${segment.process}, เวลาเริ่ม ${segment.start}, เวลาสิ้นสุด ${segment.end}, ใช้ CPU ${segment.end - segment.start} หน่วย`}
                         style={{
                           flexGrow: segment.end - segment.start,
                           '--process-color': `hsl(${(segment.colorIndex * 67 + 157) % 360} 62% 65%)`,
                         }}
-                        title={`${segment.process}: ${segment.start}–${segment.end}`}
                       >
-                        <b>{segment.process}</b><span>{segment.end - segment.start}</span>
+                        <b>{segment.process}</b><span>{segment.start}–{segment.end}</span>
+                        <div className="gantt-tooltip" aria-hidden="true">
+                          <strong>{segment.process}</strong>
+                          <span>เวลา {segment.start}–{segment.end}</span>
+                          <span>ใช้ CPU {segment.end - segment.start} หน่วย</span>
+                        </div>
                       </div>
                     ))}
                     <div className="gantt-times" aria-hidden="true">
@@ -299,6 +352,7 @@ function App() {
                     </div>
                   </div>
                 </div>
+                <div className="table-caption">รายละเอียดเวลาของแต่ละโปรเซส <span>{selectedResult.rows.length} โปรเซส</span></div>
                 <div className="table-scroll">
                   <table>
                     <thead><tr><th>PROCESS</th><th>AT</th><th>BT</th><th>ST</th><th>CT</th><th>TAT</th><th>WT</th></tr></thead>
